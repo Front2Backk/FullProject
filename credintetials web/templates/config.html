@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Eyeconic - Setup</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="logo-wrapper">
+    <img src="{{ url_for('static', filename='eyeconic-logo.png') }}" alt="Eyeconic Logo" class="logo">
+    </div>
+
+
+    <div class="container">
+        <h2> Setup Wi-Fi & User</h2>
+
+        {% if success %}
+        <div class="success">
+             Credentials saved successfully!
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/submit">
+            <label for="wifi_name">Wi-Fi Name (SSID)</label>
+            <input type="text" name="wifi_name" id="wifi_name" required>
+
+            <label for="wifi_password">Wi-Fi Password</label>
+            <input type="password" name="wifi_password" id="wifi_password" required>
+
+            <label for="username">Login Username</label>
+            <input type="text" name="username" id="username" required>
+
+            <label for="password">Login Password</label>
+            <input type="password" name="password" id="password" required>
+
+            <input type="submit" value="Save & Connect">
+        </form>
+    </div>
+</body>
+</html>
