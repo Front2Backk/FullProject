@@ -8,6 +8,7 @@ from Config.config import vosk_model_paths
 import wave
 import queue
 import threading
+import noisereduce as nr
 
 class TextToSpeech:
     def __init__(self, driver_name='sapi5'):
@@ -37,12 +38,10 @@ class SpeechRecognizer:
             if recognizer.AcceptWaveform(indata[:, 0].tobytes()):
                 result = json.loads(recognizer.Result())
                 recognized_text = result.get("text", "")
-                print(f"You said: {recognized_text}")
                 if display_output2:
                     display_output2(f"You said: {recognized_text}")
 
         try:
-            print("Listening...")
             if display_output2:
                 display_output2("Listening... Speak now")
             
@@ -63,6 +62,10 @@ class SpeechRecognizer:
                 self.model = Model(new_model_path)
                 self.model_path = new_model_path
                 print(f"Model changed to {language_code}.")
+                return True
+            else:
+                print(f"Model for {language_code} is already loaded.")
+                return False
 
 class AudioRecorder:
     def __init__(self, filename="recording.wav", sample_rate=16000):
@@ -80,10 +83,8 @@ class AudioRecorder:
 
     def start(self):
         if self.recording:
-            print("⚠️ Already recording.")
             return
 
-        print("🎙️ Starting infinite recording...")
         self.recording = True
         self.paused = False
         self.audio_queue.queue.clear()
@@ -105,7 +106,12 @@ class AudioRecorder:
             while self.recording or not self.audio_queue.empty():
                 try:
                     data = self.audio_queue.get(timeout=0.5)
-                    wf.writeframes((data * 32767).astype(np.int16).tobytes())
+                    data = data.flatten()
+
+                    # Apply noise reduction
+                    reduced_noise = nr.reduce_noise(y=data, sr=self.sample_rate, prop_decrease=1.0)
+
+                    wf.writeframes((reduced_noise * 32767).astype(np.int16).tobytes())
                 except queue.Empty:
                     continue
 
@@ -113,31 +119,18 @@ class AudioRecorder:
 
     def pause(self):
         if self.recording:
-            print("⏸️ Paused.")
             self.paused = True
 
     def resume(self):
         if self.recording and self.paused:
-            print("▶️ Resumed.")
             self.paused = False
 
     def stop(self):
         if not self.recording:
-            print("⚠️ Not recording.")
             return
 
-        print("🛑 Stopping...")
         self.recording = False
         self.stream.stop()
         self.stream.close()
         self.thread.join()
 
-
-if __name__ == '__main__':
-    tts = TextToSpeech()
-    tts.speak("Hello from the Text to Speech service.")
-
-    recognizer = SpeechRecognizer()
-    recognized_text = recognizer.get_audio()
-    print(f"Recognized text: {recognized_text}")
-    recognizer.change_model("en")  # Change to Spanish model

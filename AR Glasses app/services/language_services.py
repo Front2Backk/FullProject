@@ -66,32 +66,3 @@ class TranslationService:
             print("English translation model not available.")
             return None
 
-if __name__ == '__main__':
-
-    translator = TranslationService()
-
-    
-    # Test translation to English
-    text_ar = "مرحبا بالعالم" # Arabic: Hello World
-    english_translation = translator.translate_to_english(text_ar)
-    print(f"'{text_ar}' to English: {english_translation}")
-
-    text_es = "Hola Mundo" # Spanish: Hello World
-    english_translation_es = translator.translate_to_english(text_es)
-    print(f"'{text_es}' to English: {english_translation_es}")
-
-    # Test translation from English to another language
-    text_en = "Hello, how are you?"
-    arabic_translation = translator.translate_text(text_en, target_language="ar", source_language="en")
-    print(f"'{text_en}' to Arabic: {arabic_translation}")
-
-    spanish_translation = translator.translate_text(text_en, target_language="es", source_language="en")
-    print(f"'{text_en}' to Spanish: {spanish_translation}")
-
-    # Test with a language pair that might not be common or might fail
-    german_to_japanese = translator.translate_text("Guten Tag", target_language="ja", source_language="de")
-    print(f"'Guten Tag' to Japanese: {german_to_japanese}")
-
-    # Test empty string
-    empty_translation = translator.translate_text("", target_language="fr", source_language="en")
-    print(f"Empty string to French: '{empty_translation}' (should be empty)")

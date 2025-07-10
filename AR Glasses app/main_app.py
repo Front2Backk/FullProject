@@ -11,6 +11,7 @@ from services.vision_services import CameraManager, HandGestureRecognizer, OCRSe
 from services.audio_services import TextToSpeech, SpeechRecognizer, AudioRecorder
 from services.language_services import TranslationService
 from services.api_service import APIService,wifi_credentials
+from services.battery_services import Battery
 from InteractionManager.interaction_manager import InteractionManager
 
 class Application:
@@ -46,6 +47,7 @@ class Application:
         self.translation_service = TranslationService()
         self.api_service = APIService()
         self.wifi_credentials = wifi_credentials(wifi_name=None, wifi_password=None)
+        self.battery = Battery() # Initialize battery service
 
         # Interaction Manager (The Core Logic Unit)
         if self.camera_manager and self.speech_recognizer:
@@ -59,6 +61,7 @@ class Application:
                 wifi_credentials=self.wifi_credentials,
                 AudioRecorder= AudioRecorder(),
                 camera_manager=self.camera_manager,
+                Battery=self.battery,
                 initial_username=DEFAULT_USERNAME
             )
         else:
@@ -173,21 +176,12 @@ class Application:
     def _on_closing(self):
         """Handles the event when the window's close button is pressed."""
         print("Window close button pressed. Initiating shutdown...")
-        self.app_running = False # Signal threads to stop
-
-        # Give threads a moment to stop based on app_running flag
-        # InteractionManager's loop should break, CameraManager's loop should break.
+        self.app_running = False 
         
-        # Call InteractionManager's shutdown if it has specific cleanup beyond stopping loop
+
         if self.interaction_manager and hasattr(self.interaction_manager, '_handle_shutdown_os_command_only'):
-             # A method that only does os.system("shutdown") without UI/speech
-             # self.interaction_manager._handle_shutdown_os_command_only() 
-             pass # For now, let the main loop exit handle OS shutdown if desired.
+             pass
         
-        # For a cleaner exit, explicitly join threads here after setting app_running to False
-        # However, daemon threads will exit when the main program exits.
-        # If non-daemon, they must be joined.
-
         if self.camera_manager:
             self.camera_manager.release()
         

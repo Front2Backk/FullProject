@@ -13,10 +13,11 @@ class wifi_credentials:
     def __init__(self, wifi_name, wifi_password):
         self.wifi_name = wifi_name
         self.wifi_password = wifi_password
+        self.status= False
 
 
 
-    def connect_to_wifi_windows(self):
+    def connect_to_wifi_windows(self,update_wifi_status):
         profile = f"""
         <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
             <name>{self.wifi_name}</name>
@@ -48,27 +49,36 @@ class wifi_credentials:
         with open(profile_path, 'w') as f:
             f.write(profile)
 
-        subprocess.run(["netsh", "wlan", "add", "profile", f"filename={profile_path}"], check=True)
-        subprocess.run(["netsh", "wlan", "connect", f"name={self.wifi_name}"], check=True)
+        try:
+            subprocess.run(["netsh", "wlan", "add", "profile", f"filename={profile_path}"], check=True)
+            subprocess.run(["netsh", "wlan", "connect", f"name={self.wifi_name}"], check=True)
+            update_wifi_status(self.wifi_name)
+            self.status = True
+        except subprocess.CalledProcessError as e:
+            self.status = False
+            update_wifi_status("Failed to connect")
 
-    def connect_to_wifi_linux(self):
+    def connect_to_wifi_linux(self, update_wifi_status):
         try:
             subprocess.run([
                 "nmcli", "device", "wifi", "connect", self.wifi_name, "password", self.wifi_password
             ], check=True)
+            self.status = True
+            update_wifi_status(self.wifi_name)
         except subprocess.CalledProcessError as e:
-            print("Failed to connect:", e)
+            self.status = False
+            update_wifi_status("Failed to connect")
 
-    def connect_to_wifi(self):
+    def connect_to_wifi(self, update_wifi_status):
         system = platform.system()
             
         if system == "Windows":
-            self.connect_to_wifi_windows()
+            self.connect_to_wifi_windows(update_wifi_status)
 
         elif system == "Linux":
-            self.connect_to_wifi_linux()
+            self.connect_to_wifi_linux(update_wifi_status)
         else:
-            print("Unsupported OS")
+            update_wifi_status("Unsupported OS")
 
 
 
@@ -78,10 +88,11 @@ class APIService:
         self.password = None
         self.access_token = None
         self.refresh_token = None
+        self.status = False
 
 
 
-    def get_jwt_tokens(self):
+    def get_jwt_tokens(self,update_user_name):
         url = API_LOGIN_ENDPOINT
         payload = {
             "username": self.username,
@@ -93,30 +104,31 @@ class APIService:
             response.raise_for_status()
 
             tokens = response.json()
-            self.access_token = tokens.get("access")
+            self.access_token = tokens.get("access")  
             self.refresh_token = tokens.get("refresh")
+            update_user_name(self.username)
 
-            print("✅ Access token:", self.access_token)
-            print("🔁 Refresh token:", self.refresh_token)
+            self.status = True
             return self.access_token, self.refresh_token
 
         except requests.RequestException as e:
-            print("❌ Failed to retrieve tokens:", e)
+            update_user_name("Login Failed")
+            self.status = False
             return None, None
         
-    def refresh_access_token(self):
-        if not self.refresh_token:
-            print("⚠️ No refresh token available.")
+    def refresh_access_token(self, update_user_name):
+        if not self.refresh_token:                                      
+            update_user_name("No refresh token available")
             return False
 
         response = requests.post(API_REFRESH_TOKEN_ENDPOINT, json={"refresh": self.refresh_token})
         if response.status_code == 200:
-            self.access_token = response.json().get("access")
+            self.access_token = response.json().get("access")  
             self.refresh_token = response.json().get("refresh")
-            print("🔁 Access token refreshed!")
+            update_user_name(self.username)
             return True
         else:
-            print("❌ Failed to refresh token:", response.text)
+            update_user_name("Error")
             return False
 
     def is_connected(self):
@@ -127,10 +139,9 @@ class APIService:
             return False
         
 
-    def send_audio_to_api(self, audio_path="recording.wav"):
+    def send_audio_to_api(self, audio_path="recording.wav", update_user_name=None):
         def make_request():
             if not os.path.exists(audio_path):
-                print(f"❌ Audio file not found: {audio_path}")
                 return {"error": "Audio file not found"}
 
             headers = {
@@ -140,10 +151,9 @@ class APIService:
             try:
                 with open(audio_path, 'rb') as audio_file:
                     files = {'audio': (os.path.basename(audio_path), audio_file, 'audio/wav')}
-                    response = requests.post(API_TRANSCRIBE_ENDPOINT, files=files, headers=headers, timeout=120)
+                    response = requests.post(API_TRANSCRIBE_ENDPOINT, files=files, headers=headers, timeout=20)
                 return response
             except requests.RequestException as e:
-                print(f"❌ Request error: {e}")
                 return None
 
         # First attempt
@@ -152,24 +162,22 @@ class APIService:
             return {"error": "Could not connect to API"}
 
         if response.status_code == 401:
-            print("⚠️ Access token expired. Attempting refresh...")
-            if self.refresh_access_token():
+            if self.refresh_access_token(update_user_name):
                 response = make_request()
             else:
                 return {"error": "Session expired. Please log in again."}
 
         if response and response.status_code == 200:
-            return  response.text.strip()
+            return response.json().get("transcription", "").strip()
 
         else:
             error_msg = response.text if response else "Unknown error"
-            print(f"❌ Transcription API failed: {response.status_code if response else 'No response'} {error_msg}")
             return {"error": error_msg}
 
 
-    def send_chat_to_api(self, prompt, image_path=None):
+    def send_chat_to_api(self, prompt, image_path=None, update_user_name=None):
         def make_request():
-            data = {'prompt': prompt}
+            data = {'prompt': prompt}      
             files = {}
             headers = {"Authorization": f"Bearer {self.access_token}"}
 
@@ -201,8 +209,7 @@ class APIService:
         # First attempt
         response = make_request()
         if response.status_code == 401:
-            print("⚠️ Access token expired. Attempting refresh...")
-            if self.refresh_access_token():
+            if self.refresh_access_token(update_user_name):
                 response = make_request()
             else:
                 return "Error: Session expired. Please log in again."
@@ -210,17 +217,4 @@ class APIService:
         if response.status_code == 200:
             return response.json().get("response", "").strip()
         else:
-            print(f"❌ API request failed: {response.status_code} {response.text}")
             return f"Error: {response.status_code} - {response.text}"
-
-if __name__ == '__main__':
-    service = APIService()
-
-    # Test connectivity
-    if service.is_connected():
-        print("🌐 Internet connection available.")
-        chat_response_no_image = service.send_chat_to_api("What is the weather like today?")
-        print(f"Chat API (no image) Response: {chat_response_no_image}")
-
-    else:
-        print("❌ No internet connection.")

@@ -48,15 +48,46 @@ class UIManager:
         self.header_frame = tk.Frame(self.root, bg='black')
         self.header_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
 
+        # Right container for two text outputs
+        self.right_container_frame = tk.Frame(self.header_frame, bg='black')
+        self.right_container_frame.pack(side=tk.RIGHT, padx=20)
+
+        self.right_top_var = StringVar(value="Battery: --%")
+        self.right_middle_var = StringVar(value="Wi-Fi: --")
+        self.right_bottom_var = StringVar(value="User:--")
+
+        self.right_top_label = tk.Label(
+            self.right_container_frame, textvariable=self.right_top_var,
+            font=("Segoe UI", 12), bg='black', fg='lightgray', anchor='e', width=50
+        )
+        self.right_top_label.pack(anchor='e')
+
+        self.right_middle_label = tk.Label(
+            self.right_container_frame, textvariable=self.right_middle_var,
+            font=("Segoe UI", 12), bg='black', fg='lightgray', anchor='e', width=20
+        )
+        self.right_middle_label.pack(anchor='e')
+
+        self.right_bottom_label = tk.Label(
+            self.right_container_frame, textvariable=self.right_bottom_var,
+            font=("Segoe UI", 12), bg='black', fg='lightgray', anchor='e', width=20
+        )
+        self.right_bottom_label.pack(anchor='e')
+
+
+        # Load logo
         self._load_logo()
         if self.logo_photo:
             self.logo_label_widget = tk.Label(self.header_frame, image=self.logo_photo, bg='black')
-            self.logo_label_widget.image = self.logo_photo # Keep a reference
+            self.logo_label_widget.image = self.logo_photo
             self.logo_label_widget.pack(side=tk.LEFT, padx=10, pady=5)
 
-        self.title_label_widget = tk.Label(self.header_frame, text=self.app_title, font=("Arial", 20, "bold"),
-                                     bg='black', fg='white')
+        self.title_label_widget = tk.Label(
+            self.header_frame, text=self.app_title,
+            font=("Arial", 20, "bold"), bg='black', fg='white'
+        )
         self.title_label_widget.pack(side=tk.LEFT, padx=10)
+
 
     def _setup_main_content_area(self):
         self.content_frame = tk.Frame(self.root, bg='black')
@@ -175,8 +206,9 @@ class UIManager:
     def display_output5(self, text, is_prefix=True):
         prefix = "AI Response: " if is_prefix and text else ""
         self.translation_text_var.set(f"{prefix}{text}")
+
     def display_output6(self, text, is_prefix=True):
-        prefix = "Recording status: " if is_prefix and text else ""
+        prefix = "Prompt: " if is_prefix and text else ""
         self.image_text_var.set(f"{prefix}{text}")
 
     def clear_all_text_outputs(self):
@@ -185,6 +217,16 @@ class UIManager:
         self.display_output3("", is_prefix=False)
         self.display_output4("", is_prefix=False)
         self.display_output5("", is_prefix=False)
+
+    def update_battery_status(self, value):
+        self.right_top_var.set(f"Battery: {value}")
+
+    def update_wifi_status(self, value):
+        self.right_middle_var.set(f"Wi-Fi: {value}")
+
+    def update_user_name(self, value):
+        self.right_bottom_var.set(f"User: {value}")
+
 
     def show_loading_screen(self, message="Loading..."):
         # Hide video label if it's visible

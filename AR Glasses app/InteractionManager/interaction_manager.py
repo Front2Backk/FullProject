@@ -6,12 +6,19 @@ from services.audio_services import SpeechRecognizer, TextToSpeech, AudioRecorde
 from services.language_services import TranslationService
 from services.vision_services import OCRService, CameraManager
 from services.api_service import APIService, wifi_credentials
+from services.battery_services import Battery
+from services.agent_services import run_livekit_worker,LiveKitChatAgent
 import json
+from utils.subproc import run_script_as_subprocess, ctrl_c_subprocess
+
+
+
+
 
 class InteractionManager:
     def __init__(self, ui_manager, speech_recognizer: SpeechRecognizer, tts_engine: TextToSpeech,
                  translation_service: TranslationService, ocr_service: OCRService,
-                 api_service: APIService,wifi_credentials: wifi_credentials,AudioRecorder: AudioRecorder, camera_manager: CameraManager,
+                 api_service: APIService,wifi_credentials: wifi_credentials,AudioRecorder: AudioRecorder, camera_manager: CameraManager,Battery: Battery,
                  initial_username=DEFAULT_USERNAME):
         self.ui = ui_manager
         self.speech_recognizer = speech_recognizer
@@ -22,6 +29,7 @@ class InteractionManager:
         self.wifi= wifi_credentials
         self.audio_recorder = AudioRecorder
         self.camera = camera_manager
+        self.battery = Battery
 
         self.username = initial_username
         self.current_vosk_lang_code = "en"
@@ -31,8 +39,23 @@ class InteractionManager:
         self.current_interaction_mode = "idle"
         print("InteractionManager initialized.")
 
+    @staticmethod
+    def strip_words(text, words):
+        text = text.strip()
+        for word in words:
+            if text.lower().startswith(word):
+                text = text[len(word):].strip()
+            if text.lower().endswith(word):
+                text = text[:-len(word)].strip()
+        return text
+
+
     def configration_loop(self,file_path=JSON_FILE_PATH,last_wifi={"wifi_name": None, "wifi_password": None},last_users={"username": None, "password": None}):
         while True:
+            try:
+                self.battery.get_battery_info(self.ui.update_battery_status)
+            except:
+                self.ui.update_battery_status("Battery information not available.")
             try:
                 if os.path.exists(file_path):
                     with open(file_path, 'r') as f:
@@ -44,17 +67,18 @@ class InteractionManager:
                     self.api.username = data.get("username")
                     self.api.password = data.get("password")
 
-
                     if self.wifi.wifi_name and self.wifi.wifi_password:
                         if (self.wifi.wifi_name != last_wifi["wifi_name"] or self.wifi.wifi_password != last_wifi["wifi_password"]):
                             print(f"Detected Wi-Fi change: Connecting to {self.wifi.wifi_name}")
-                            self.wifi.connect_to_wifi()
-                        last_wifi = {"wifi_name": self.wifi.wifi_name, "wifi_password": self.wifi.wifi_password}
+                            self.wifi.connect_to_wifi(self.ui.update_wifi_status)
+                            if self.wifi.status:
+                                last_wifi = {"wifi_name": self.wifi.wifi_name, "wifi_password": self.wifi.wifi_password}
                     if self.api.username and self.api.password:
                         if (self.api.username != last_users["username"] or self.api.password != last_users["password"]):
                             print(f"Detected User change: Logging in {self.api.username}")
-                            self.api.get_jwt_tokens()
-                        last_users = {"username": self.api.username, "password": self.api.password}
+                            self.api.get_jwt_tokens(update_user_name=self.ui.update_user_name)
+                            if self.api.status:
+                                last_users = {"username": self.api.username, "password": self.api.password}
             except Exception as e:
                 print("Error:", e)
             time.sleep(10)
@@ -124,27 +148,22 @@ class InteractionManager:
                 continue
 
             # If we are here, lang_name_input is valid (not empty)
-            normalized_input = lang_name_input.strip().title()
+            normalized_input = lang_name_input
+            normalized_keys = {key.lower(): key for key in vosk_languages}
+            print(normalized_input)
 
         
             selected_lang_code = None
 
-            if normalized_input in vosk_model_paths:
-                selected_lang_code = normalized_input
-            elif normalized_input in vosk_languages:
-                selected_lang_code = vosk_languages[normalized_input]
-            else: 
-                for lang_name, lang_code in vosk_languages.items():
-                    if normalized_input in lang_name or lang_name in normalized_input : 
-                        selected_lang_code = lang_code
-                        self._speak_and_update_ui(f"Selected language: {lang_name}")
-                        break
+            if normalized_input in normalized_keys:
+                original_key = normalized_keys[normalized_input]
+                selected_lang_code = vosk_languages[original_key]
+                print (selected_lang_code)
             
             if selected_lang_code:
 
                 if for_source:
                     if self.current_vosk_lang_code != selected_lang_code:
-                        self.ui.show_loading_screen(f"Loading {normalized_input} speech model...")
                         if self.speech_recognizer.change_model(selected_lang_code):
                             self.current_vosk_lang_code = selected_lang_code
                             return selected_lang_code
@@ -285,90 +304,92 @@ class InteractionManager:
         return None
 
 
-    def _handle_iconic_sub_assistant(self, initial_image_path=None):
-        """Handles the nested 'Iconic' assistant that uses send_to_api."""
-        self.current_interaction_mode = "iconic_sub_chat"
-        self._speak_and_update_ui(
-            "Hello, I am Iconic, your personal assistant. Tell me how I can help you.",
-            interaction_text_to_display="Iconic: How can I help?"
-        )
 
-        current_image_for_api = initial_image_path
-        api_response = "" 
-        self._speak_and_update_ui(
-                "You can say 'start' to begin recording, 'stop' to stop recording, "
-                "'continue' to resume recording, or 'pause' to pause the recording. "
-                "Say 'send' to process your audio, or 'get out' to exit the Iconic sub-assistant."
-            )
-
-        while self.app_running and self.current_interaction_mode == "iconic_sub_chat":
-            self._reset_vosk_model_to_english()
-            user_query = self._get_audio_input().lower()
-
-            if "start" in user_query:
-                self.audio_recorder.start()
-                self._speak_and_update_ui("Recording started. Say 'stop' to stop recording.")
-            elif "stop" in user_query:
-                self.audio_recorder.stop()
-                self._speak_and_update_ui("Recording stopped. You can now say 'send' to process the audio.")
-            elif "continue" in user_query or "resume" in user_query:
-                self.audio_recorder.resume()
-                self._speak_and_update_ui("Resumed recording. Say 'stop' when you're done.")
-            elif "pause" in user_query:
-                self.audio_recorder.pause()
-                self._speak_and_update_ui("Recording paused. Say 'continue' to resume or 'stop' to stop.")
-            elif "get out" in user_query:
-                self.audio_recorder.stop()
-                self._speak_and_update_ui("Exiting Iconic sub-assistant.")
-                self.current_interaction_mode = "online_iconic"
-                break
-            elif "send" in user_query:
-                self.audio_recorder.stop()
-                try:
-                    whisper_response = self.api.send_audio_to_api(self.audio_recorder.filename)
-                    api_response = self.api.send_chat_to_api(whisper_response, image_path=current_image_for_api)
-                    self.ui.display_output5(api_response)
-                    self.tts.speak(api_response)
-                except Exception as e:
-                    self._speak_and_update_ui(f"Iconic Error: {str(e)}")
-        current_image_for_api = None
 
 
 
     def _handle_online_mode(self):
         self.current_interaction_mode = "online_iconic"
-        self._speak_and_update_ui("iconic Online: You are connected. You can say 'capture', 'Iconic', or 'get out'.",
-                                  interaction_text_to_display="iconic Online: 'capture', 'Iconic', or 'get out'.")
+        self._speak_and_update_ui("iconic Online: You are connected.",
+                                  interaction_text_to_display=f"iam here to help you {DEFAULT_USERNAME}!")
         
         last_captured_image = None
+        api_response = ""
+
+        proc = None  # at the top of the method
 
         while self.app_running and self.current_interaction_mode == "online_iconic":
             self._reset_vosk_model_to_english()
             command = self._get_audio_input(update_interaction=False)
-
             if not command:
                 continue
 
-            if "capture" in command:
+            command = command.lower()
+
+            if "hello" in command:
+                if proc is None or proc.poll() is not None:
+                    proc = run_script_as_subprocess()
+                    self._speak_and_update_ui("LiveKit agent started.")
+                else:
+                    self._speak_and_update_ui("LiveKit agent already running.")
+
+            elif "capture" in command:
                 self.ui.display_output("Capturing image...")
                 captured_file = self.camera.capture_image(self.image_capture_path)
                 if captured_file:
                     self._speak_and_update_ui(f"Image {os.path.basename(captured_file)} captured.",
-                                              interaction_text_to_display=f"Image captured: {os.path.basename(captured_file)}")
+                                            interaction_text_to_display=f"Image captured: {os.path.basename(captured_file)}")
                     last_captured_image = captured_file 
                 else:
                     self._speak_and_update_ui("Failed to capture image.")
                 continue 
 
-            elif "iconic" in command:
-                self._handle_iconic_sub_assistant(initial_image_path=last_captured_image)
-                last_captured_image = None
+            elif "start" in command:
+                self.audio_recorder.start()
+                self._speak_and_update_ui("Recording started. Say 'stop' to stop recording.")
+
+            elif "stop" in command:
+                self.audio_recorder.stop()
+                self._speak_and_update_ui("Recording stopped. You can now say 'go' to process the audio.")
+
+            elif "continue" in command:
+                self.audio_recorder.resume()
+                self._speak_and_update_ui("Resumed recording. Say 'stop' when you're done.")
+
+            elif "wait" in command:
+                self.audio_recorder.pause()
+                self._speak_and_update_ui("Recording paused. Say 'continue' to resume or 'stop' to stop.")
+
+            elif command == "go":
+                self.audio_recorder.stop()
+                try:
+                    whisper_response = self.api.send_audio_to_api(
+                        self.audio_recorder.filename,
+                        update_user_name=self.ui.update_user_name
+                    )
+                    self.ui.display_output6(whisper_response)
+                    text = InteractionManager.strip_words(whisper_response, ["stop", "wait", "continue"])
+                    api_response = self.api.send_chat_to_api(
+                        text,
+                        image_path=last_captured_image,
+                        update_user_name=self.ui.update_user_name
+                    )
+                    self.ui.display_output5(api_response)
+                    self.tts.speak(api_response)
+                    last_captured_image = None
+                except Exception as e:
+                    self._speak_and_update_ui(f"Iconic Error: {str(e)}")
 
             elif "get out" in command:
-                self._speak_and_update_ui("Exiting iconic Online mode.")
-                break
-        
-        self.current_interaction_mode = "idle"
+                self.ui.display_output2("Exiting online mode.")
+                if proc and proc.poll() is None:
+                    ctrl_c_subprocess(proc)
+                    proc = None
+                    
+                    self.current_interaction_mode ="online_iconic"
+                else:
+                    self.current_interaction_mode = "idle"
+
 
 
     def _handle_offline_mode(self):
