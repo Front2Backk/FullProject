@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Remove any default margins and paddings that might cause lines */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+}
+
+/* Ensure no unwanted borders or outlines */
+*:focus {
+  outline: none;
+}
+
+/* Remove any default hr or border elements */
+hr {
+  display: none;
+}
+
+/* Ensure smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Custom animations */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.5s ease-out;
+}
+/* Add this after your existing styles */
+body {
+  background: url('https://i.postimg.cc/yNZjy8rQ/20250706-1649-AR-Glasses-Night-Glow-simple-compose-01jzfztd3efn0atcc7b8ar0eb6.png') no-repeat center center fixed;
+  background-size: cover;
+  background-color: #111827; /* Fallback color */
+  color: #f3f4f6; /* Default text color for better contrast */
+}
+
+
+.prose {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.prose p {
+  margin-bottom: 0.75rem;
+}
+
+.prose ul, .prose ol {
+  margin-bottom: 0.75rem;
+}
+
+.prose li {
+  margin-bottom: 0.25rem;
+}
+
+.prose h1, .prose h2, .prose h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose code {
+  font-size: 0.8rem;
+}
+
+.prose pre {
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.prose blockquote {
+  margin-bottom: 1rem;
+}
+
+.prose table {
+  margin-bottom: 1rem;
+}
+
+
+
+.markdown-content {
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.markdown-content * {
+  max-width: 100%;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content ul:last-child,
+.markdown-content ol:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child {
+  margin-top: 0;
+}
